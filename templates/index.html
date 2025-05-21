@@ -26,6 +26,7 @@
             opacity: 0.5;
             cursor: move;
             box-sizing: border-box;
+            touch-action: none;
         }
 
         .resize-handle {
@@ -79,16 +80,14 @@
     <form action="{{ url_for('download_pdfs') }}" method="get">
         <button type="submit">Download Final PDFs</button>
     </form>
-    
 
     {% for folder, images in pdf_images.items() %}
         {% set pdf_index = loop.index %}
         <h2>PDF: {{ folder }}</h2>
         <form action="{{ url_for('rename_folder', old_name=folder) }}" method="POST" style="margin-bottom: 10px;">
-             <input type="text" name="new_name" placeholder="Rename PDF">
-             <button type="submit">Rename</button>
+            <input type="text" name="new_name" placeholder="Rename PDF">
+            <button type="submit">Rename</button>
         </form>
-
 
         <div id="pdf-{{ pdf_index }}">
             <div class="image-container">
@@ -155,86 +154,100 @@
         }
 
         function drawRectangle(pdfIndex, imageIndex) {
-    const wrapper = document.querySelector(`.image-wrapper[data-pdf="${pdfIndex}"]:nth-of-type(${imageIndex})`);
-    const img = document.getElementById(`image-${pdfIndex}-${imageIndex}`);
-    const container = wrapper;
+            const wrapper = document.querySelector(`.image-wrapper[data-pdf="${pdfIndex}"]:nth-of-type(${imageIndex})`);
+            const img = document.getElementById(`image-${pdfIndex}-${imageIndex}`);
+            const container = wrapper;
 
-    const rect = document.createElement('div');
-    rect.className = 'rectangle';
-    rect.style.width = '146px';
-    rect.style.height = '29px';
+            const rect = document.createElement('div');
+            rect.className = 'rectangle';
+            rect.style.width = '146px';
+            rect.style.height = '29px';
 
-    const centerX = (img.offsetWidth - 101) / 2;
-    const centerY = (img.offsetHeight - 20) / 2;
+            const centerX = (img.offsetWidth - 101) / 2;
+            const centerY = (img.offsetHeight - 20) / 2;
 
-    rect.style.left = centerX + 'px';
-    rect.style.top = centerY + 'px';
+            rect.style.left = centerX + 'px';
+            rect.style.top = centerY + 'px';
 
-    const handle = document.createElement('div');
-    handle.className = 'resize-handle';
-    rect.appendChild(handle);
-    container.appendChild(rect);
+            const handle = document.createElement('div');
+            handle.className = 'resize-handle';
+            rect.appendChild(handle);
+            container.appendChild(rect);
 
-    let isDragging = false;
-    let offsetX, offsetY;
+            let isDragging = false;
+            let offsetX, offsetY;
 
-    rect.addEventListener('mousedown', function (e) {
-        if (e.target === handle) return;
-        isDragging = true;
-        offsetX = e.clientX - rect.getBoundingClientRect().left;
-        offsetY = e.clientY - rect.getBoundingClientRect().top;
-        e.preventDefault();
-    });
+            // Mouse support
+            rect.addEventListener('mousedown', startDrag);
+            document.addEventListener('mousemove', onDrag);
+            document.addEventListener('mouseup', endDrag);
 
-    document.addEventListener('mousemove', function (e) {
-        if (!isDragging) return;
-        const containerRect = img.getBoundingClientRect();
-        let left = e.clientX - containerRect.left - offsetX;
-        let top = e.clientY - containerRect.top - offsetY;
+            // Touch support
+            rect.addEventListener('touchstart', startDrag, { passive: false });
+            document.addEventListener('touchmove', onDrag, { passive: false });
+            document.addEventListener('touchend', endDrag);
 
-        // Constrain within image boundaries
-        left = Math.max(0, Math.min(left, img.offsetWidth - rect.offsetWidth));
-        top = Math.max(0, Math.min(top, img.offsetHeight - rect.offsetHeight));
+            function startDrag(e) {
+                if (e.target === handle) return;
+                isDragging = true;
+                const clientX = e.clientX || e.touches[0].clientX;
+                const clientY = e.clientY || e.touches[0].clientY;
+                offsetX = clientX - rect.getBoundingClientRect().left;
+                offsetY = clientY - rect.getBoundingClientRect().top;
+                e.preventDefault();
+            }
 
-        rect.style.left = left + 'px';
-        rect.style.top = top + 'px';
-    });
+            function onDrag(e) {
+                if (!isDragging) return;
+                const clientX = e.clientX || e.touches[0].clientX;
+                const clientY = e.clientY || e.touches[0].clientY;
 
-    document.addEventListener('mouseup', function () {
-        isDragging = false;
-    });
+                const containerRect = img.getBoundingClientRect();
+                let left = clientX - containerRect.left - offsetX;
+                let top = clientY - containerRect.top - offsetY;
 
-    handle.addEventListener('mousedown', function (e) {
-        e.stopPropagation();
-        const startX = e.clientX;
-        const startY = e.clientY;
-        const startWidth = rect.offsetWidth;
-        const startHeight = rect.offsetHeight;
+                left = Math.max(0, Math.min(left, img.offsetWidth - rect.offsetWidth));
+                top = Math.max(0, Math.min(top, img.offsetHeight - rect.offsetHeight));
 
-        function doResize(ev) {
-            let newWidth = startWidth + (ev.clientX - startX);
-            let newHeight = startHeight + (ev.clientY - startY);
+                rect.style.left = left + 'px';
+                rect.style.top = top + 'px';
+                e.preventDefault();
+            }
 
-            // Constrain within image boundaries
-            newWidth = Math.min(newWidth, img.offsetWidth - rect.offsetLeft);
-            newHeight = Math.min(newHeight, img.offsetHeight - rect.offsetTop);
+            function endDrag() {
+                isDragging = false;
+            }
 
-            rect.style.width = Math.max(10, newWidth) + 'px';
-            rect.style.height = Math.max(10, newHeight) + 'px';
+            // Resizing (mouse only for now, touch can be added similarly)
+            handle.addEventListener('mousedown', function (e) {
+                e.stopPropagation();
+                const startX = e.clientX;
+                const startY = e.clientY;
+                const startWidth = rect.offsetWidth;
+                const startHeight = rect.offsetHeight;
+
+                function doResize(ev) {
+                    let newWidth = startWidth + (ev.clientX - startX);
+                    let newHeight = startHeight + (ev.clientY - startY);
+
+                    newWidth = Math.min(newWidth, img.offsetWidth - rect.offsetLeft);
+                    newHeight = Math.min(newHeight, img.offsetHeight - rect.offsetTop);
+
+                    rect.style.width = Math.max(10, newWidth) + 'px';
+                    rect.style.height = Math.max(10, newHeight) + 'px';
+                }
+
+                function stopResize() {
+                    document.removeEventListener('mousemove', doResize);
+                    document.removeEventListener('mouseup', stopResize);
+                }
+
+                document.addEventListener('mousemove', doResize);
+                document.addEventListener('mouseup', stopResize);
+            });
+
+            rectangles[`${pdfIndex}-${imageIndex}`] = rect;
         }
-
-        function stopResize() {
-            document.removeEventListener('mousemove', doResize);
-            document.removeEventListener('mouseup', stopResize);
-        }
-
-        document.addEventListener('mousemove', doResize);
-        document.addEventListener('mouseup', stopResize);
-    });
-
-    rectangles[`${pdfIndex}-${imageIndex}`] = rect;
-}
-
 
         function saveRectangle(pdfIndex, imageIndex) {
             const rect = rectangles[`${pdfIndex}-${imageIndex}`];
@@ -242,18 +255,13 @@
 
             const img = document.getElementById(`image-${pdfIndex}-${imageIndex}`);
             const imgRect = img.getBoundingClientRect();
-            const container = img.parentElement;
             const rectRect = rect.getBoundingClientRect();
-            const containerRect = container.getBoundingClientRect();
 
             const scaleX = img.naturalWidth / img.width;
             const scaleY = img.naturalHeight / img.height;
 
-            const relativeLeft = rectRect.left - imgRect.left;
-            const relativeTop = rectRect.top - imgRect.top;
-
-            const x = relativeLeft * scaleX;
-            const y = relativeTop * scaleY;
+            const x = (rectRect.left - imgRect.left) * scaleX;
+            const y = (rectRect.top - imgRect.top) * scaleY;
             const width = rectRect.width * scaleX;
             const height = rectRect.height * scaleY;
 
