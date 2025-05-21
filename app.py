@@ -4,7 +4,6 @@ from pdf2image import convert_from_path
 from PIL import Image, ImageDraw
 import uuid
 import fitz  # PyMuPDF
-import pytesseract
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 import shutil
@@ -31,9 +30,7 @@ def compress_pdf_to_range(input_path, output_path, target_min=4 * 1024 * 1024, t
     quality = 95
     step = 5
     for _ in range(10):
-        # Open the PDF using fitz
-        doc = fitz.open(input_path)  # Ensure you're using the correct method to open the PDF
-
+        doc = fitz.open(input_path)
         new_doc = fitz.open()
 
         for page in doc:
@@ -58,16 +55,9 @@ def compress_pdf_to_range(input_path, output_path, target_min=4 * 1024 * 1024, t
             break
 
 
-
 def process_pdf_images(image_paths, output_pdf_path):
     width, height = A4
-    valid_images = []
-
-    for img_path in image_paths:
-        img = Image.open(img_path)
-        extracted_text = pytesseract.image_to_string(img).lower()
-
-        valid_images.append(img_path)
+    valid_images = image_paths  # Since no filtering needed without OCR
 
     if not valid_images:
         return None
@@ -92,7 +82,7 @@ def process_pdf_images(image_paths, output_pdf_path):
     c.save()
 
     size = os.path.getsize(output_pdf_path)
-    if size > 5 * 1024 * 1024:  # Only compress if the size is above 2MB
+    if size > 5 * 1024 * 1024:
         compressed_path = output_pdf_path.replace(".pdf", "_compressed.pdf")
         compress_pdf_to_range(output_pdf_path, compressed_path)
         if os.path.exists(compressed_path):
@@ -103,7 +93,7 @@ def process_pdf_images(image_paths, output_pdf_path):
 
 def clean_folders():
     try:
-        time.sleep(60)  # wait for 1 minutes
+        time.sleep(60)
         for folder in [UPLOAD_FOLDER, IMAGE_FOLDER, OUTPUT_FOLDER]:
             for item in os.listdir(folder):
                 path = os.path.join(folder, item)
@@ -111,7 +101,7 @@ def clean_folders():
                     os.remove(path)
                 else:
                     shutil.rmtree(path, ignore_errors=True)
-        print("Cleaned folders after 2 minutes.")
+        print("Cleaned folders after 1 minute.")
     except Exception as e:
         print(f"Error cleaning folders: {e}")
 
@@ -122,7 +112,7 @@ def index():
     for folder in os.listdir(IMAGE_FOLDER):
         folder_path = os.path.join(IMAGE_FOLDER, folder)
         if os.path.isdir(folder_path):
-            images = sorted([ 
+            images = sorted([
                 os.path.join(folder_path, img)
                 for img in os.listdir(folder_path)
                 if img.endswith('.png')
@@ -225,7 +215,7 @@ def download_pdfs():
         if not os.path.isdir(folder_path):
             continue
 
-        image_files = sorted([ 
+        image_files = sorted([
             os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.png')
         ])
 
@@ -239,7 +229,6 @@ def download_pdfs():
     if not generated_files:
         return "No valid PDFs generated."
 
-    # Start cleanup timer
     threading.Thread(target=clean_folders, daemon=True).start()
 
     if len(generated_files) == 1:
