@@ -26,7 +26,6 @@
             opacity: 0.5;
             cursor: move;
             box-sizing: border-box;
-            touch-action: none;
         }
 
         .resize-handle {
@@ -85,8 +84,8 @@
         {% set pdf_index = loop.index %}
         <h2>PDF: {{ folder }}</h2>
         <form action="{{ url_for('rename_folder', old_name=folder) }}" method="POST" style="margin-bottom: 10px;">
-            <input type="text" name="new_name" placeholder="Rename PDF">
-            <button type="submit">Rename</button>
+             <input type="text" name="new_name" placeholder="Rename PDF">
+             <button type="submit">Rename</button>
         </form>
 
         <div id="pdf-{{ pdf_index }}">
@@ -154,7 +153,7 @@
         }
 
         function drawRectangle(pdfIndex, imageIndex) {
-            const wrapper = document.querySelector(`.image-wrapper[data-pdf="${pdfIndex}"]:nth-of-type(${imageIndex})`);
+            const wrapper = document.querySelectorAll(`.image-wrapper[data-pdf="${pdfIndex}"]`)[imageIndex - 1];
             const img = document.getElementById(`image-${pdfIndex}-${imageIndex}`);
             const container = wrapper;
 
@@ -174,76 +173,86 @@
             rect.appendChild(handle);
             container.appendChild(rect);
 
+            // DRAGGING SUPPORT (mouse + touch)
             let isDragging = false;
-            let offsetX, offsetY;
+            let offsetX = 0, offsetY = 0;
 
-            // Mouse support
-            rect.addEventListener('mousedown', startDrag);
-            document.addEventListener('mousemove', onDrag);
-            document.addEventListener('mouseup', endDrag);
-
-            // Touch support
-            rect.addEventListener('touchstart', startDrag, { passive: false });
-            document.addEventListener('touchmove', onDrag, { passive: false });
-            document.addEventListener('touchend', endDrag);
-
-            function startDrag(e) {
-                if (e.target === handle) return;
+            const startDrag = (x, y) => {
                 isDragging = true;
-                const clientX = e.clientX || e.touches[0].clientX;
-                const clientY = e.clientY || e.touches[0].clientY;
-                offsetX = clientX - rect.getBoundingClientRect().left;
-                offsetY = clientY - rect.getBoundingClientRect().top;
-                e.preventDefault();
-            }
+                offsetX = x - rect.getBoundingClientRect().left;
+                offsetY = y - rect.getBoundingClientRect().top;
+            };
 
-            function onDrag(e) {
+            const doDrag = (x, y) => {
                 if (!isDragging) return;
-                const clientX = e.clientX || e.touches[0].clientX;
-                const clientY = e.clientY || e.touches[0].clientY;
-
                 const containerRect = img.getBoundingClientRect();
-                let left = clientX - containerRect.left - offsetX;
-                let top = clientY - containerRect.top - offsetY;
+                let left = x - containerRect.left - offsetX;
+                let top = y - containerRect.top - offsetY;
 
                 left = Math.max(0, Math.min(left, img.offsetWidth - rect.offsetWidth));
                 top = Math.max(0, Math.min(top, img.offsetHeight - rect.offsetHeight));
 
                 rect.style.left = left + 'px';
                 rect.style.top = top + 'px';
-                e.preventDefault();
-            }
+            };
 
-            function endDrag() {
+            const stopDrag = () => {
                 isDragging = false;
-            }
+            };
 
-            // Resizing (mouse only for now, touch can be added similarly)
-            handle.addEventListener('mousedown', function (e) {
+            rect.addEventListener('mousedown', e => {
+                if (e.target === handle) return;
+                startDrag(e.clientX, e.clientY);
+                e.preventDefault();
+            });
+
+            rect.addEventListener('touchstart', e => {
+                if (e.target === handle) return;
+                const touch = e.touches[0];
+                startDrag(touch.clientX, touch.clientY);
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', e => doDrag(e.clientX, e.clientY));
+            document.addEventListener('touchmove', e => {
+                const touch = e.touches[0];
+                doDrag(touch.clientX, touch.clientY);
+            });
+
+            document.addEventListener('mouseup', stopDrag);
+            document.addEventListener('touchend', stopDrag);
+
+            // RESIZE SUPPORT (mouse + touch)
+            handle.addEventListener('mousedown', e => {
                 e.stopPropagation();
                 const startX = e.clientX;
                 const startY = e.clientY;
                 const startWidth = rect.offsetWidth;
                 const startHeight = rect.offsetHeight;
 
-                function doResize(ev) {
-                    let newWidth = startWidth + (ev.clientX - startX);
-                    let newHeight = startHeight + (ev.clientY - startY);
-
+                const resize = (x, y) => {
+                    let newWidth = startWidth + (x - startX);
+                    let newHeight = startHeight + (y - startY);
                     newWidth = Math.min(newWidth, img.offsetWidth - rect.offsetLeft);
                     newHeight = Math.min(newHeight, img.offsetHeight - rect.offsetTop);
-
                     rect.style.width = Math.max(10, newWidth) + 'px';
                     rect.style.height = Math.max(10, newHeight) + 'px';
-                }
+                };
 
-                function stopResize() {
-                    document.removeEventListener('mousemove', doResize);
+                const stopResize = () => {
+                    document.removeEventListener('mousemove', onMouseMove);
                     document.removeEventListener('mouseup', stopResize);
-                }
+                    document.removeEventListener('touchmove', onTouchMove);
+                    document.removeEventListener('touchend', stopResize);
+                };
 
-                document.addEventListener('mousemove', doResize);
+                const onMouseMove = ev => resize(ev.clientX, ev.clientY);
+                const onTouchMove = ev => resize(ev.touches[0].clientX, ev.touches[0].clientY);
+
+                document.addEventListener('mousemove', onMouseMove);
                 document.addEventListener('mouseup', stopResize);
+                document.addEventListener('touchmove', onTouchMove);
+                document.addEventListener('touchend', stopResize);
             });
 
             rectangles[`${pdfIndex}-${imageIndex}`] = rect;
